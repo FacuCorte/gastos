@@ -14,13 +14,14 @@
     --bg: #f3f5f2; --card: #ffffff; --ink: #101412; --mute: #6b756f; --line: #e4e8e5;
     --hero: #151a17; --hero-2: #1f2723; --on-hero: #ffffff; --hero-mute: #9aa6a0;
     --green: #0f8a5f; --green-t: #e1f3ea; --red: #d8453f; --red-t: #fbe7e5; --chip: #e9eeea;
-    --hero-pos: #3ddc97; --hero-neg: #ff7a73;
+    --hero-pos: #3ddc97; --hero-neg: #ff7a73; --warn: #9a6700; --warn-t: #fff4d6; --track: #e9eeea; --prev: #b9c3bd;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #0b0f0d; --card: #161c19; --ink: #eef2ef; --mute: #8f9b95; --line: #26302b;
       --hero: #1d2622; --hero-2: #26322d;
       --green: #3ddc97; --green-t: #173326; --red: #ff7a73; --red-t: #3a1f1e; --chip: #212b26;
+      --warn: #f2c14e; --warn-t: #3a3016; --track: #212b26; --prev: #4a5650;
     }
   }
   * { box-sizing: border-box; }
@@ -40,6 +41,7 @@
   .mini b { display: block; margin-top: 2px; font-size: 17px; font-variant-numeric: tabular-nums; }
   .mini .pos { color: var(--hero-pos); }
   .mini .neg { color: var(--hero-neg); }
+  .mini small { display: block; margin-top: 4px; font-size: 11.5px; color: var(--hero-mute); }
 
   .card { background: var(--card); border-radius: 20px; padding: 6px 14px; margin: 0; list-style: none; }
   .row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
@@ -47,6 +49,7 @@
   .ico { width: 42px; height: 42px; flex: none; border-radius: 13px; display: grid; place-items: center; font-size: 20px; }
   .ico.neg { background: var(--red-t); }
   .ico.pos { background: var(--green-t); }
+  .ico.pend { background: var(--chip); }
   .t { flex: 1; min-width: 0; }
   .c { display: block; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .m { display: block; font-size: 12.5px; color: var(--mute); }
@@ -54,9 +57,29 @@
   .a { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .a.pos { color: var(--green); }
   .a.neg { color: var(--red); }
+  .a.mut { color: var(--mute); }
   .acts { display: flex; gap: 14px; margin-top: 3px; }
   .acts button { border: 0; background: transparent; padding: 2px 0; font: inherit; font-size: 12.5px; color: var(--mute); cursor: pointer; text-decoration: underline; }
   .vacio { color: var(--mute); font-size: 14px; padding: 14px 0; }
+
+  /* barras: este mes (color) y el mes pasado (gris, más finita) */
+  .bars { margin-top: 6px; display: grid; gap: 3px; }
+  .bar { height: 7px; border-radius: 4px; background: var(--track); overflow: hidden; }
+  .bar i { display: block; height: 100%; border-radius: 4px; background: var(--red); }
+  .bar.prev { height: 4px; }
+  .bar.prev i { background: var(--prev); }
+  .ley { display: flex; gap: 14px; font-size: 12px; color: var(--mute); margin: -4px 2px 8px; }
+  .ley span::before { content: ""; display: inline-block; width: 10px; height: 6px; border-radius: 3px; margin-right: 5px; vertical-align: middle; background: var(--red); }
+  .ley span.p::before { background: var(--prev); }
+
+  .pat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 4px 0 12px; }
+  .pat div { background: var(--bg); border-radius: 12px; padding: 8px 10px; min-width: 0; }
+  .pat span { display: block; font-size: 12px; color: var(--mute); }
+  .pat b { display: block; font-size: 14px; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pat small { display: block; font-size: 11.5px; color: var(--mute); }
+  .patTotal { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 0 8px; }
+  .patTotal b { font-size: 22px; font-variant-numeric: tabular-nums; }
+  .warn { background: var(--warn-t); color: var(--warn); border-radius: 12px; padding: 8px 10px; font-size: 13px; margin-bottom: 12px; }
 
   .fab { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(22px + env(safe-area-inset-bottom));
     width: 64px; height: 64px; border: 0; border-radius: 50%; background: var(--green); color: #fff;
@@ -87,13 +110,13 @@
   .primary:disabled { opacity: .6; cursor: default; }
   #msg { min-height: 22px; margin-top: 10px; font-size: 14px; text-align: center; color: var(--green); }
   #msg.err { color: var(--red); }
-  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(100px + env(safe-area-inset-bottom)); background: var(--hero); color: #fff; padding: 9px 16px; border-radius: 999px; font-size: 14px; }
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(100px + env(safe-area-inset-bottom)); background: var(--hero); color: #fff; padding: 9px 16px; border-radius: 999px; font-size: 14px; max-width: calc(100% - 32px); text-align: center; }
   .toast[hidden] { display: none; }
-  .top { display: flex; justify-content: space-between; align-items: flex-start; }
-  .estado { font-size: 12.5px; color: var(--mute); }
+  .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .estado { font-size: 12.5px; color: var(--mute); text-align: right; }
   .estado.err { color: var(--red); }
   .link { border: 0; background: transparent; padding: 4px 0; font: inherit; font-size: 13px; color: var(--mute); text-decoration: underline; cursor: pointer; }
-  #setup[hidden], main[hidden], .fab[hidden] { display: none; }
+  #setup[hidden], main[hidden], .fab[hidden], [hidden] { display: none; }
   #setup p { color: var(--mute); font-size: 14px; }
 </style>
 </head>
@@ -117,8 +140,8 @@
     <span class="k">Saldo en cuenta</span>
     <p class="big" id="saldo">…</p>
     <div class="duo">
-      <div class="mini"><span class="k">Ingresos</span><b class="pos" id="ingMes">…</b></div>
-      <div class="mini"><span class="k">Gastos</span><b class="neg" id="gasMes">…</b></div>
+      <div class="mini"><span class="k">Ingresos</span><b class="pos" id="ingMes">…</b><small id="ingNota"></small></div>
+      <div class="mini"><span class="k">Gastos (neto)</span><b class="neg" id="gasMes">…</b><small id="gasNota"></small></div>
     </div>
   </section>
 
@@ -126,7 +149,24 @@
   <ul class="card" id="lista"></ul>
 
   <h2>Gastos por categoría</h2>
+  <div class="ley"><span>Este mes</span><span class="p" id="leyAnt">Mes pasado</span></div>
   <ul class="card" id="resumen"></ul>
+
+  <h2>Ingresos por origen</h2>
+  <ul class="card" id="ingresos"></ul>
+
+  <section id="bloquePat" hidden>
+    <h2>Patrimonio</h2>
+    <div class="card">
+      <div class="patTotal"><span class="m">Total</span><b id="patTotal"></b></div>
+      <div class="warn" id="patWarn" hidden></div>
+      <div class="pat">
+        <div><span>Cuenta</span><b id="patBanco"></b></div>
+        <div><span>Dólares</span><b id="patDol"></b><small id="patUsd"></small></div>
+        <div><span>Cartera</span><b id="patCart"></b></div>
+      </div>
+    </div>
+  </section>
 
   <p style="text-align:center;margin-top:24px"><button class="link" id="reconectar" type="button">Cambiar link o clave</button></p>
 </main>
@@ -143,8 +183,12 @@
   <input id="concepto" autocomplete="off" placeholder="Ej: Desayuno">
   <div class="chips" id="frec"></div>
   <div id="bloqueCat">
-    <div class="lbl">Categoría</div>
+    <div class="lbl" id="lblCats">Categoría</div>
     <div class="chips" id="cats"></div>
+    <div id="bloqueDev" hidden>
+      <div class="lbl">¿Es una devolución? Elegí de qué gasto (se resta de esa categoría)</div>
+      <div class="chips" id="catsDev"></div>
+    </div>
     <input id="catNueva" autocomplete="off" placeholder="Otra categoría (escribila si no está)" style="margin-top:10px">
   </div>
   <div id="bloqueCuenta" hidden><label for="cuenta">Cuenta</label><select id="cuenta"></select></div>
@@ -155,12 +199,13 @@
 </section>
 
 <script>
-  var E = null, tipo = 'Gasto', cat = '', guardando = false, editId = null, token = uid();
+  var E = null, tipo = 'Gasto', cat = '', guardando = false, editId = null, token = uid(), enviandoCola = false;
   var ETIQ = { 'Gasto': 'Gasto', 'Ingreso': 'Ingreso', 'Cobro de Interés': 'Interés' };
   var ICONOS = { Comida: '🍔', Supermercado: '🛒', Kiosco: '🍬', Bebidas: '🥤', Delivery: '🛵', Salidas: '🎉', Transporte: '🚌',
     Combustible: '⛽', Suscripciones: '📺', Servicios: '💡', Salud: '💊', Estudio: '📚', Hogar: '🏠', Ropa: '👕', Regalos: '🎁',
-    Mascotas: '🐾', Otros: '🧾', Intereses: '📈' };
+    Mascotas: '🐾', Otros: '🧾', Intereses: '📈', Baile: '💃', Trabajo: '💼', Efectivo: '💵', 'Regalo recibido': '🎁' };
   var ARS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
+  var USD = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'USD' });
   var $ = function (id) { return document.getElementById(id); };
 
   function uid() { return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2); }
@@ -183,11 +228,13 @@
   }
   function icono(r) {
     if (r.tipo === 'Cobro de Interés') return '📈';
-    if (r.tipo === 'Ingreso') return '💼';
+    if (r.dev) return '↩️';
+    if (r.tipo === 'Ingreso') return ICONOS[r.categoria] || '💼';
     return ICONOS[r.categoria] || '🧾';
   }
+  function plata(n) { return (n < 0 ? '−' : '') + ARS.format(Math.abs(n)); }
   function aviso(txt, error) { var m = $('msg'); m.textContent = txt || ''; m.className = error ? 'err' : ''; }
-  function toast(txt) { var t = $('toast'); t.textContent = txt; t.hidden = false; setTimeout(function () { t.hidden = true; }, 2200); }
+  function toast(txt) { var t = $('toast'); t.textContent = txt; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(function () { t.hidden = true; }, 3000); }
 
   function abrir() { $('sheet').hidden = false; $('scrim').hidden = false; }
   function cerrar() { $('sheet').hidden = true; $('scrim').hidden = true; limpiarForm(); aviso(''); }
@@ -196,8 +243,10 @@
   function leerLS(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
   function guardarLS(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
   var CONF = leerLS('cf_conf');
+  var COLA = leerLS('cf_cola') || [];  // movimientos cargados sin señal, esperando para enviarse
 
   // Llama a una función del Apps Script. text/plain evita el preflight CORS que Apps Script no responde.
+  // Los errores de red llevan e.red = true (sin señal, o Google no respondió): solo esos van a la cola.
   function api(accion, args) {
     return fetch(CONF.url, { method: 'POST', body: JSON.stringify({ clave: CONF.clave, accion: accion, args: args || [] }) })
       .then(function (r) {
@@ -205,8 +254,10 @@
         return r.json().catch(function () { throw new Error('Respuesta inesperada. Revisá que la implementación tenga acceso "Cualquier usuario".'); });
       }, function () {
         // fetch también falla así si Google responde una página de error o de login (sin permiso CORS)
-        throw new Error(navigator.onLine === false ? 'Sin conexión.'
+        var e = new Error(navigator.onLine === false ? 'Sin conexión.'
           : 'No pude conectar con la API. Revisá el link (Administrar implementaciones) y que el acceso sea "Cualquier usuario".');
+        e.red = true;
+        throw e;
       })
       .then(function (j) { if (!j.ok) throw new Error(j.error || 'Error del servidor.'); return j.data; });
   }
@@ -224,16 +275,16 @@
     m.textContent = 'Conectando…'; m.className = 'estado'; $('cfgGuardar').disabled = true;
     api('getEstado').then(function (est) {
       guardarLS('cf_conf', CONF); $('cfgGuardar').disabled = false; m.textContent = '';
-      $('setup').hidden = true; init(est);
+      $('setup').hidden = true; init(est); enviarCola();
     }, function (e) { $('cfgGuardar').disabled = false; m.textContent = e.message; m.className = 'estado err'; });
   }
 
   function cargar() {
     var cache = leerLS('cf_estado');
-    if (cache) init(cache);  // se muestra al instante lo último que se vio
+    if (cache && !E) init(cache);  // se muestra al instante lo último que se vio
     estado('Actualizando…');
-    api('getEstado').then(function (est) { init(est); estado(''); },
-      function (e) { estado(cache ? 'Sin actualizar: ' + e.message : e.message, true); });
+    api('getEstado').then(function (est) { init(est); estado(''); enviarCola(); },
+      function (e) { estado((E ? 'Sin actualizar: ' : '') + e.message, true); });
   }
   function init(est) {
     E = est; guardarLS('cf_estado', est);
@@ -245,18 +296,55 @@
     render();
   }
 
+  // Envía de a uno los movimientos que quedaron en la cola. Se corta si sigue sin señal.
+  function enviarCola() {
+    if (enviandoCola || !COLA.length || !CONF) return;
+    enviandoCola = true;
+    var item = COLA[0];
+    api('agregarMovimiento', [item]).then(function (est) {
+      COLA.shift(); guardarLS('cf_cola', COLA); enviandoCola = false;
+      init(est); estado('');
+      if (!COLA.length) toast('Se enviaron los movimientos pendientes');
+      enviarCola();
+    }, function (e) {
+      enviandoCola = false;
+      if (e.red) { render(); return; }  // sigue sin señal: queda en la cola
+      COLA.shift(); guardarLS('cf_cola', COLA); render();  // el servidor lo rechazó: no tiene sentido reintentar
+      toast('No se pudo guardar “' + item.concepto + '”: ' + e.message);
+      enviarCola();
+    });
+  }
+
+  function catsVisibles() {
+    if (tipo === 'Gasto') return E.categorias;
+    if (tipo === 'Ingreso') return E.categoriasIngreso || [];
+    return [];
+  }
+  function chipsCat(cont, lista) {
+    cont.textContent = '';
+    lista.forEach(function (c) {
+      var b = el('button', 'chip' + (c === cat ? ' on' : ''), c); b.type = 'button';
+      b.onclick = function () { cat = (cat === c) ? '' : c; $('catNueva').value = ''; render(); };
+      cont.appendChild(b);
+    });
+  }
+
   function render() {
     $('saldo').textContent = ARS.format(E.saldo);
     $('mesNombre').textContent = E.mes.nombre;
     $('ingMes').textContent = E.mes.ingresos == null ? '—' : ARS.format(E.mes.ingresos);
-    $('gasMes').textContent = ARS.format(E.mes.gastado);
+    $('gasMes').textContent = plata(E.mes.gastado);
+    $('ingNota').textContent = E.mes.devuelto ? 'Sin contar ' + ARS.format(E.mes.devuelto) + ' de devoluciones' : '';
+    $('gasNota').textContent = E.mesAnterior ? 'En ' + E.mesAnterior.nombre + ' a esta altura: ' + plata(E.mesAnterior.alDia) : '';
     $('sheetTitulo').textContent = editId ? 'Editar movimiento' : 'Nuevo movimiento';
+    if (E.mesAnterior) $('leyAnt').textContent = E.mesAnterior.nombre.charAt(0).toUpperCase() + E.mesAnterior.nombre.slice(1) + ' completo';
 
     var seg = $('seg'); seg.textContent = '';
     E.tipos.forEach(function (t) {
       var b = el('button', t === tipo ? 'on' : '', ETIQ[t] || t);
       b.type = 'button'; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', t === tipo ? 'true' : 'false');
       b.onclick = function () {
+        if (tipo !== t) cat = '';
         tipo = t;
         if (t === 'Cobro de Interés' && !$('concepto').value) $('concepto').value = 'Rendimiento diario cuenta remunerada';
         render();
@@ -276,26 +364,84 @@
       frec.appendChild(b);
     });
 
-    $('bloqueCat').hidden = tipo !== 'Gasto';
-    var cats = $('cats'); cats.textContent = '';
-    E.categorias.forEach(function (c) {
-      var b = el('button', 'chip' + (c === cat ? ' on' : ''), c); b.type = 'button';
-      b.onclick = function () { cat = (cat === c) ? '' : c; $('catNueva').value = ''; render(); };
-      cats.appendChild(b);
-    });
+    $('bloqueCat').hidden = tipo === 'Cobro de Interés';
+    $('lblCats').textContent = tipo === 'Ingreso' ? 'De dónde viene' : 'Categoría';
+    chipsCat($('cats'), catsVisibles());
+    $('bloqueDev').hidden = tipo !== 'Ingreso';
+    if (tipo === 'Ingreso') chipsCat($('catsDev'), E.categorias);
 
+    renderResumen();
+    renderIngresos();
+    renderPatrimonio();
+    renderLista();
+  }
+
+  function renderResumen() {
     var res = $('resumen'); res.textContent = '';
-    if (!E.resumen.length) res.appendChild(el('div', 'vacio', 'Todavía no hay gastos este mes.'));
-    E.resumen.forEach(function (r) {
+    var lista = E.resumen || [];
+    if (!lista.length) { res.appendChild(el('div', 'vacio', 'Todavía no hay gastos este mes.')); return; }
+    var max = lista.reduce(function (m, r) { return Math.max(m, r.gastado, r.anterior || 0); }, 0) || 1;
+    lista.forEach(function (r) {
       var li = el('li', 'row');
       li.appendChild(el('div', 'ico neg', ICONOS[r.categoria] || '🧾'));
-      var t = el('div', 't'); t.appendChild(el('span', 'c', r.categoria)); li.appendChild(t);
-      li.appendChild(el('div', 'a neg', ARS.format(r.gastado)));
+      var t = el('div', 't');
+      t.appendChild(el('span', 'c', r.categoria));
+      var partes = [];
+      if (r.anterior) partes.push('Mes pasado ' + plata(r.anterior));
+      if (r.devuelto) partes.push('Te devolvieron ' + ARS.format(r.devuelto));
+      if (partes.length) t.appendChild(el('span', 'm', partes.join(' · ')));
+      var bars = el('div', 'bars');
+      var b1 = el('div', 'bar'), i1 = el('i'); i1.style.width = Math.max(0, r.gastado) / max * 100 + '%'; b1.appendChild(i1);
+      var b2 = el('div', 'bar prev'), i2 = el('i'); i2.style.width = Math.max(0, r.anterior || 0) / max * 100 + '%'; b2.appendChild(i2);
+      bars.appendChild(b1); bars.appendChild(b2); t.appendChild(bars);
+      li.appendChild(t);
+      li.appendChild(el('div', 'a ' + (r.gastado > 0 ? 'neg' : 'mut'), plata(r.gastado)));
       res.appendChild(li);
     });
+  }
 
+  function renderIngresos() {
+    var ul = $('ingresos'); ul.textContent = '';
+    var lista = E.ingresosPor || [];
+    if (!lista.length) { ul.appendChild(el('div', 'vacio', 'Todavía no hay ingresos este mes.')); return; }
+    lista.forEach(function (r) {
+      var li = el('li', 'row');
+      li.appendChild(el('div', 'ico pos', r.categoria === 'Intereses' ? '📈' : (ICONOS[r.categoria] || '💼')));
+      var t = el('div', 't'); t.appendChild(el('span', 'c', r.categoria)); li.appendChild(t);
+      li.appendChild(el('div', 'a pos', ARS.format(r.monto)));
+      ul.appendChild(li);
+    });
+  }
+
+  function renderPatrimonio() {
+    var p = E.patrimonio;
+    $('bloquePat').hidden = !p;
+    if (!p) return;
+    $('patTotal').textContent = ARS.format(p.total);
+    $('patBanco').textContent = ARS.format(p.banco);
+    $('patDol').textContent = ARS.format(p.dolares);
+    $('patUsd').textContent = USD.format(p.usd) + ' a ' + ARS.format(p.cotizacion);
+    $('patCart').textContent = ARS.format(p.cartera);
+    $('patWarn').hidden = !p.preciosViejos;
+    $('patWarn').textContent = p.preciosViejos === 1
+      ? '⚠ 1 precio de la cartera hace más de una semana que no lo actualizás (Panel, columna G).'
+      : '⚠ ' + p.preciosViejos + ' precios de la cartera hace más de una semana que no los actualizás (Panel, columna G).';
+  }
+
+  function renderLista() {
     var ul = $('lista'); ul.textContent = '';
-    if (!E.recientes.length) ul.appendChild(el('div', 'vacio', 'Todavía no hay movimientos.'));
+    COLA.forEach(function (p) {
+      var li = el('li', 'row');
+      li.appendChild(el('div', 'ico pend', '⏳'));
+      var t = el('div', 't');
+      t.appendChild(el('span', 'c', p.concepto));
+      t.appendChild(el('span', 'm', 'Pendiente de enviar (sin señal)'));
+      li.appendChild(t);
+      var egreso = p.tipo === 'Gasto';
+      li.appendChild(el('div', 'a mut', (egreso ? '−' : '+') + ARS.format(p.monto)));
+      ul.appendChild(li);
+    });
+    if (!E.recientes.length && !COLA.length) ul.appendChild(el('div', 'vacio', 'Todavía no hay movimientos.'));
     E.recientes.forEach(function (r) {
       var pos = r.monto >= 0;
       var li = el('li', 'row');
@@ -303,14 +449,14 @@
       var t = el('div', 't');
       t.appendChild(el('span', 'c', r.concepto));
       var m = el('span', 'm', fechaCorta(r.fecha));
-      if (r.categoria) m.appendChild(el('span', 'cat', r.categoria));
+      if (r.categoria) m.appendChild(el('span', 'cat', r.dev ? 'Devolución · ' + r.categoria : r.categoria));
       t.appendChild(m);
       var acts = el('div', 'acts');
       var ed = el('button', null, 'Editar'); ed.type = 'button'; ed.onclick = function () { editar(r); };
       var d = el('button', null, 'Eliminar'); d.type = 'button'; d.onclick = function () { eliminar(r); };
       acts.appendChild(ed); acts.appendChild(d); t.appendChild(acts);
       li.appendChild(t);
-      li.appendChild(el('div', 'a ' + (pos ? 'pos' : 'neg'), (pos ? '+' : '\u2212') + ARS.format(Math.abs(r.monto))));
+      li.appendChild(el('div', 'a ' + (pos ? 'pos' : 'neg'), (pos ? '+' : '−') + ARS.format(Math.abs(r.monto))));
       ul.appendChild(li);
     });
   }
@@ -338,7 +484,7 @@
     var btn = $('guardar'), etiqueta = editId ? 'Guardar cambios' : 'Guardar';
     btn.disabled = true; btn.textContent = 'Guardando…'; aviso('');
     var payload = { tipo: tipo, monto: monto, concepto: concepto,
-      categoria: tipo === 'Gasto' ? ($('catNueva').value.trim() || cat) : '',
+      categoria: tipo === 'Cobro de Interés' ? '' : ($('catNueva').value.trim() || cat),
       fecha: $('fecha').value, cuenta: $('cuenta').value, token: token };
     var fueEdicion = !!editId;
     (fueEdicion ? api('editarMovimiento', [editId, payload]) : api('agregarMovimiento', [payload]))
@@ -348,15 +494,22 @@
         toast(fueEdicion ? 'Cambios guardados' : 'Guardado');
       }, function (e) {
         guardando = false; btn.disabled = false; btn.textContent = etiqueta;
-        aviso(e.message || 'No se pudo guardar. Probá de nuevo.', true);
+        if (e.red && !fueEdicion) {
+          // sin señal: queda en el celu y se envía solo cuando vuelva la conexión (el token evita duplicados)
+          COLA.push(payload); guardarLS('cf_cola', COLA);
+          token = uid(); cerrar(); render();
+          toast('Sin señal: lo guardo cuando vuelva la conexión');
+          return;
+        }
+        aviso(fueEdicion && e.red ? 'Sin señal: para editar necesitás conexión.' : (e.message || 'No se pudo guardar. Probá de nuevo.'), true);
       });
   }
 
   function eliminar(r) {
-    if (!confirm('¿Eliminar \u201c' + r.concepto + '\u201d?')) return;
+    if (!confirm('¿Eliminar “' + r.concepto + '”?')) return;
     api('eliminarMovimiento', [r.id])
       .then(function (est) { init(est); toast('Eliminado'); },
-        function (e) { toast(e.message || 'No se pudo eliminar'); });
+        function (e) { toast(e.red ? 'Sin señal: para eliminar necesitás conexión.' : (e.message || 'No se pudo eliminar')); });
   }
 
   $('fab').onclick = nuevo;
@@ -368,6 +521,7 @@
   $('concepto').addEventListener('keydown', function (e) { if (e.key === 'Enter') guardar(); });
   $('cfgGuardar').onclick = conectar;
   $('reconectar').onclick = mostrarSetup;
+  window.addEventListener('online', function () { if (CONF) { enviarCola(); cargar(); } });
   // Al volver a la app desde segundo plano, trae los datos nuevos (ej. el interés de las 10:42)
   document.addEventListener('visibilitychange', function () { if (!document.hidden && CONF && $('sheet').hidden) cargar(); });
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
