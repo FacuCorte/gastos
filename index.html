@@ -72,7 +72,7 @@
   .ley span::before { content: ""; display: inline-block; width: 10px; height: 6px; border-radius: 3px; margin-right: 5px; vertical-align: middle; background: var(--red); }
   .ley span.p::before { background: var(--prev); }
 
-  .pat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 4px 0 12px; }
+  .pat { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 4px 0 12px; }
   .pat div { background: var(--bg); border-radius: 12px; padding: 8px 10px; min-width: 0; }
   .pat span { display: block; font-size: 12px; color: var(--mute); }
   .pat b { display: block; font-size: 14px; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -145,6 +145,17 @@
     </div>
   </section>
 
+  <section id="bloqueEfe" hidden>
+    <h2>Efectivo</h2>
+    <div class="card">
+      <div class="row">
+        <div class="ico pos">💵</div>
+        <div class="t"><span class="c" id="efeSaldo"></span><span class="m" id="efeMes"></span></div>
+        <button class="chip" id="efeMover" type="button">Sacar o depositar</button>
+      </div>
+    </div>
+  </section>
+
   <h2>Movimientos recientes</h2>
   <ul class="card" id="lista"></ul>
 
@@ -164,6 +175,7 @@
         <div><span>Cuenta</span><b id="patBanco"></b></div>
         <div><span>Dólares</span><b id="patDol"></b><small id="patUsd"></small></div>
         <div><span>Cartera</span><b id="patCart"></b></div>
+        <div id="patEfeBox" hidden><span>Efectivo</span><b id="patEfe"></b></div>
       </div>
     </div>
   </section>
@@ -179,7 +191,8 @@
   <div class="head"><h3 id="sheetTitulo">Nuevo movimiento</h3><button class="close" id="cerrar" type="button" aria-label="Cerrar">×</button></div>
   <div class="seg" id="seg" role="tablist" aria-label="Tipo de operación"></div>
   <div class="montoWrap"><span>$</span><input id="monto" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Monto en pesos"></div>
-  <label for="concepto">Concepto</label>
+  <div id="bloqueCuenta" hidden><div class="lbl" id="lblCuenta">Cuenta</div><div class="chips" id="cuentas"></div></div>
+  <label for="concepto" id="lblConcepto">Concepto</label>
   <input id="concepto" autocomplete="off" placeholder="Ej: Desayuno">
   <div class="chips" id="frec"></div>
   <div id="bloqueCat">
@@ -191,7 +204,6 @@
     </div>
     <input id="catNueva" autocomplete="off" placeholder="Otra categoría (escribila si no está)" style="margin-top:10px">
   </div>
-  <div id="bloqueCuenta" hidden><label for="cuenta">Cuenta</label><select id="cuenta"></select></div>
   <label for="fecha">Fecha</label>
   <input id="fecha" type="date">
   <button class="primary" id="guardar">Guardar</button>
@@ -200,7 +212,20 @@
 
 <script>
   var E = null, tipo = 'Gasto', cat = '', guardando = false, editId = null, token = uid(), enviandoCola = false;
-  var ETIQ = { 'Gasto': 'Gasto', 'Ingreso': 'Ingreso', 'Cobro de Interés': 'Interés' };
+  var BANCO = 'Cuenta Bancaria', cuenta = BANCO, sentido = 0;  // sentido: índice de MOVER (para la pestaña Mover)
+  var ETIQ = { 'Gasto': 'Gasto', 'Ingreso': 'Ingreso', 'Cobro de Interés': 'Interés', 'Mover': 'Mover' };
+  function nombreCuenta(c) { return c === BANCO ? 'Banco' : c; }
+  // Pares desde/hacia para mover plata entre cuentas (con banco + efectivo: sacar y depositar)
+  function paresMover() {
+    var out = [];
+    E.cuentas.forEach(function (a) { E.cuentas.forEach(function (b) { if (a !== b) out.push({ desde: a, hacia: b }); }); });
+    return out;
+  }
+  function etiquetaPar(p) {
+    if (p.desde === BANCO && p.hacia === 'Efectivo') return 'Sacar efectivo (banco → efectivo)';
+    if (p.desde === 'Efectivo' && p.hacia === BANCO) return 'Depositar (efectivo → banco)';
+    return nombreCuenta(p.desde) + ' → ' + nombreCuenta(p.hacia);
+  }
   var ICONOS = { Comida: '🍔', Supermercado: '🛒', Kiosco: '🍬', Bebidas: '🥤', Delivery: '🛵', Salidas: '🎉', Transporte: '🚌',
     Combustible: '⛽', Suscripciones: '📺', Servicios: '💡', Salud: '💊', Estudio: '📚', Hogar: '🏠', Ropa: '👕', Regalos: '🎁',
     Mascotas: '🐾', Otros: '🧾', Intereses: '📈', Baile: '💃', Trabajo: '💼', Efectivo: '💵', 'Regalo recibido': '🎁' };
@@ -290,9 +315,7 @@
     E = est; guardarLS('cf_estado', est);
     document.querySelector('main').hidden = false; $('fab').hidden = false;
     if (!$('fecha').value) $('fecha').value = E.hoy;
-    var sel = $('cuenta'); sel.textContent = '';
-    E.cuentas.forEach(function (c) { var o = el('option', null, c); o.value = c; sel.appendChild(o); });
-    $('bloqueCuenta').hidden = E.cuentas.length < 2;
+    if (E.cuentas.indexOf(cuenta) < 0) cuenta = E.cuentas[0];
     render();
   }
 
@@ -301,7 +324,7 @@
     if (enviandoCola || !COLA.length || !CONF) return;
     enviandoCola = true;
     var item = COLA[0];
-    api('agregarMovimiento', [item]).then(function (est) {
+    api(item._accion || 'agregarMovimiento', [item]).then(function (est) {
       COLA.shift(); guardarLS('cf_cola', COLA); enviandoCola = false;
       init(est); estado('');
       if (!COLA.length) toast('Se enviaron los movimientos pendientes');
@@ -339,8 +362,13 @@
     $('sheetTitulo').textContent = editId ? 'Editar movimiento' : 'Nuevo movimiento';
     if (E.mesAnterior) $('leyAnt').textContent = E.mesAnterior.nombre.charAt(0).toUpperCase() + E.mesAnterior.nombre.slice(1) + ' completo';
 
+    // El interés lo carga solo el activador: no hay pestaña (salvo para editar uno ya cargado)
+    var tabs = E.tipos.filter(function (t) { return t !== 'Cobro de Interés'; });
+    if (E.cuentas.length > 1 && !editId) tabs.push('Mover');
+    if (tabs.indexOf(tipo) < 0) tabs.unshift(tipo);
+    var mover = tipo === 'Mover';
     var seg = $('seg'); seg.textContent = '';
-    E.tipos.forEach(function (t) {
+    tabs.forEach(function (t) {
       var b = el('button', t === tipo ? 'on' : '', ETIQ[t] || t);
       b.type = 'button'; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', t === tipo ? 'true' : 'false');
       b.onclick = function () {
@@ -364,12 +392,33 @@
       frec.appendChild(b);
     });
 
-    $('bloqueCat').hidden = tipo === 'Cobro de Interés';
+    // Cuenta: en Gasto/Ingreso se elige una; en Mover, el sentido (sacar o depositar)
+    var cts = $('cuentas'); cts.textContent = '';
+    $('bloqueCuenta').hidden = E.cuentas.length < 2 || tipo === 'Cobro de Interés';
+    $('lblCuenta').textContent = mover ? 'Qué querés hacer' : (tipo === 'Ingreso' ? 'Dónde entra' : 'Con qué pagaste');
+    if (mover) {
+      paresMover().forEach(function (p, i) {
+        var b = el('button', 'chip' + (i === sentido ? ' on' : ''), etiquetaPar(p)); b.type = 'button';
+        b.onclick = function () { sentido = i; render(); };
+        cts.appendChild(b);
+      });
+    } else {
+      E.cuentas.forEach(function (c) {
+        var b = el('button', 'chip' + (c === cuenta ? ' on' : ''), (c === BANCO ? '🏦 ' : '💵 ') + nombreCuenta(c)); b.type = 'button';
+        b.onclick = function () { cuenta = c; render(); };
+        cts.appendChild(b);
+      });
+    }
+    $('lblConcepto').textContent = mover ? 'Concepto (opcional)' : 'Concepto';
+    frec.hidden = mover;
+
+    $('bloqueCat').hidden = tipo === 'Cobro de Interés' || mover;
     $('lblCats').textContent = tipo === 'Ingreso' ? 'De dónde viene' : 'Categoría';
     chipsCat($('cats'), catsVisibles());
     $('bloqueDev').hidden = tipo !== 'Ingreso';
     if (tipo === 'Ingreso') chipsCat($('catsDev'), E.categorias);
 
+    renderEfectivo();
     renderResumen();
     renderIngresos();
     renderPatrimonio();
@@ -413,10 +462,20 @@
     });
   }
 
+  function renderEfectivo() {
+    var f = E.efectivo;
+    $('bloqueEfe').hidden = !f;
+    if (!f) return;
+    $('efeSaldo').textContent = plata(f.saldo);
+    $('efeMes').textContent = f.gastadoMes ? 'Gastaste ' + ARS.format(f.gastadoMes) + ' en efectivo este mes' : 'Sin gastos en efectivo este mes';
+  }
+
   function renderPatrimonio() {
     var p = E.patrimonio;
     $('bloquePat').hidden = !p;
     if (!p) return;
+    $('patEfeBox').hidden = p.efectivo == null;
+    if (p.efectivo != null) $('patEfe').textContent = plata(p.efectivo);
     $('patTotal').textContent = ARS.format(p.total);
     $('patBanco').textContent = ARS.format(p.banco);
     $('patDol').textContent = ARS.format(p.dolares);
@@ -434,29 +493,33 @@
       var li = el('li', 'row');
       li.appendChild(el('div', 'ico pend', '⏳'));
       var t = el('div', 't');
-      t.appendChild(el('span', 'c', p.concepto));
+      t.appendChild(el('span', 'c', p.concepto || etiquetaPar(p)));
       t.appendChild(el('span', 'm', 'Pendiente de enviar (sin señal)'));
       li.appendChild(t);
-      var egreso = p.tipo === 'Gasto';
-      li.appendChild(el('div', 'a mut', (egreso ? '−' : '+') + ARS.format(p.monto)));
+      var signo = p._accion === 'transferir' ? '⇄ ' : (p.tipo === 'Gasto' ? '−' : '+');
+      li.appendChild(el('div', 'a mut', signo + ARS.format(p.monto)));
       ul.appendChild(li);
     });
     if (!E.recientes.length && !COLA.length) ul.appendChild(el('div', 'vacio', 'Todavía no hay movimientos.'));
     E.recientes.forEach(function (r) {
       var pos = r.monto >= 0;
       var li = el('li', 'row');
-      li.appendChild(el('div', 'ico ' + (pos ? 'pos' : 'neg'), icono(r)));
+      li.appendChild(el('div', 'ico ' + (r.tr ? 'pend' : pos ? 'pos' : 'neg'), r.tr ? '⇄' : icono(r)));
       var t = el('div', 't');
       t.appendChild(el('span', 'c', r.concepto));
       var m = el('span', 'm', fechaCorta(r.fecha));
-      if (r.categoria) m.appendChild(el('span', 'cat', r.dev ? 'Devolución · ' + r.categoria : r.categoria));
+      if (r.tr) m.appendChild(el('span', 'cat', (pos ? 'Entró a ' : 'Salió de ') + nombreCuenta(r.cuenta)));
+      else {
+        if (r.cuenta && r.cuenta !== BANCO) m.appendChild(el('span', 'cat', '💵 ' + r.cuenta));
+        if (r.categoria) m.appendChild(el('span', 'cat', r.dev ? 'Devolución · ' + r.categoria : r.categoria));
+      }
       t.appendChild(m);
       var acts = el('div', 'acts');
-      var ed = el('button', null, 'Editar'); ed.type = 'button'; ed.onclick = function () { editar(r); };
+      if (!r.tr) { var ed = el('button', null, 'Editar'); ed.type = 'button'; ed.onclick = function () { editar(r); }; acts.appendChild(ed); }
       var d = el('button', null, 'Eliminar'); d.type = 'button'; d.onclick = function () { eliminar(r); };
-      acts.appendChild(ed); acts.appendChild(d); t.appendChild(acts);
+      acts.appendChild(d); t.appendChild(acts);
       li.appendChild(t);
-      li.appendChild(el('div', 'a ' + (pos ? 'pos' : 'neg'), (pos ? '+' : '−') + ARS.format(Math.abs(r.monto))));
+      li.appendChild(el('div', 'a ' + (r.tr ? 'mut' : pos ? 'pos' : 'neg'), (pos ? '+' : '−') + ARS.format(Math.abs(r.monto))));
       ul.appendChild(li);
     });
   }
@@ -466,9 +529,10 @@
     editId = null; $('guardar').textContent = 'Guardar';
     if (E) $('fecha').value = E.hoy;
   }
-  function nuevo() { limpiarForm(); tipo = 'Gasto'; render(); abrir(); $('monto').focus(); }
+  function nuevo() { limpiarForm(); tipo = 'Gasto'; cuenta = BANCO; render(); abrir(); $('monto').focus(); }
+  function moverPlata() { limpiarForm(); tipo = 'Mover'; sentido = 0; render(); abrir(); $('monto').focus(); }
   function editar(r) {
-    editId = r.id; tipo = r.tipo; cat = r.categoria || '';
+    editId = r.id; tipo = r.tipo; cat = r.categoria || ''; cuenta = r.cuenta || BANCO;
     $('catNueva').value = ''; $('monto').value = String(Math.abs(r.monto)).replace('.', ',');
     $('concepto').value = r.concepto; $('fecha').value = r.fecha;
     $('guardar').textContent = 'Guardar cambios'; aviso('');
@@ -478,16 +542,23 @@
   function guardar() {
     if (guardando) return;
     var monto = parseMonto($('monto').value), concepto = $('concepto').value.trim();
+    var mover = tipo === 'Mover';
     if (!(monto > 0)) { aviso('Ingresá un monto válido.', true); return; }
-    if (!concepto) { aviso('Falta el concepto.', true); return; }
+    if (!concepto && !mover) { aviso('Falta el concepto.', true); return; }
     guardando = true;
     var btn = $('guardar'), etiqueta = editId ? 'Guardar cambios' : 'Guardar';
     btn.disabled = true; btn.textContent = 'Guardando…'; aviso('');
-    var payload = { tipo: tipo, monto: monto, concepto: concepto,
-      categoria: tipo === 'Cobro de Interés' ? '' : ($('catNueva').value.trim() || cat),
-      fecha: $('fecha').value, cuenta: $('cuenta').value, token: token };
+    var payload;
+    if (mover) {
+      var par = paresMover()[sentido];
+      payload = { _accion: 'transferir', monto: monto, desde: par.desde, hacia: par.hacia, concepto: concepto, fecha: $('fecha').value, token: token };
+    } else {
+      payload = { tipo: tipo, monto: monto, concepto: concepto,
+        categoria: tipo === 'Cobro de Interés' ? '' : ($('catNueva').value.trim() || cat),
+        fecha: $('fecha').value, cuenta: cuenta, token: token };
+    }
     var fueEdicion = !!editId;
-    (fueEdicion ? api('editarMovimiento', [editId, payload]) : api('agregarMovimiento', [payload]))
+    (fueEdicion ? api('editarMovimiento', [editId, payload]) : api(payload._accion || 'agregarMovimiento', [payload]))
       .then(function (est) {
         guardando = false; btn.disabled = false;
         token = uid(); cerrar(); init(est); estado('');
@@ -513,6 +584,7 @@
   }
 
   $('fab').onclick = nuevo;
+  $('efeMover').onclick = moverPlata;
   $('cerrar').onclick = cerrar;
   $('scrim').onclick = cerrar;
   $('guardar').onclick = guardar;
