@@ -118,6 +118,10 @@
   .link { border: 0; background: transparent; padding: 4px 0; font: inherit; font-size: 13px; color: var(--mute); text-decoration: underline; cursor: pointer; }
   #setup[hidden], main[hidden], .fab[hidden], [hidden] { display: none; }
   #setup p { color: var(--mute); font-size: 14px; }
+  .duo2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .precio { display: grid; grid-template-columns: 1fr 130px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .precio .viejo { color: var(--red); }
+  .precio input { text-align: right; font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -158,6 +162,7 @@
 
   <h2>Movimientos recientes</h2>
   <ul class="card" id="lista"></ul>
+  <p style="text-align:center;margin:10px 0 0"><button class="chip" id="verTodos" type="button">Ver todos los movimientos</button></p>
 
   <h2>Gastos por categoría</h2>
   <div class="ley"><span>Este mes</span><span class="p" id="leyAnt">Mes pasado</span></div>
@@ -177,6 +182,7 @@
         <div><span>Cartera</span><b id="patCart"></b></div>
         <div id="patEfeBox" hidden><span>Efectivo</span><b id="patEfe"></b></div>
       </div>
+      <p style="margin:0 0 12px"><button class="chip" id="abrirPrecios" type="button" hidden>Actualizar precios de la cartera</button></p>
     </div>
   </section>
 
@@ -192,6 +198,11 @@
   <div class="seg" id="seg" role="tablist" aria-label="Tipo de operación"></div>
   <div class="montoWrap"><span>$</span><input id="monto" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Monto en pesos"></div>
   <div id="bloqueCuenta" hidden><div class="lbl" id="lblCuenta">Cuenta</div><div class="chips" id="cuentas"></div></div>
+  <div id="bloqueUsd" hidden>
+    <label for="usd" id="lblUsd">¿Cuántos dólares?</label>
+    <input id="usd" inputmode="decimal" autocomplete="off" placeholder="US$ 0">
+    <div class="m" id="cotizUsd" style="margin-top:6px"></div>
+  </div>
   <label for="concepto" id="lblConcepto">Concepto</label>
   <input id="concepto" autocomplete="off" placeholder="Ej: Desayuno">
   <div class="chips" id="frec"></div>
@@ -210,20 +221,46 @@
   <div id="msg" role="status" aria-live="polite"></div>
 </section>
 
+<section class="sheet" id="hist" hidden aria-label="Todos los movimientos">
+  <div class="head"><h3>Movimientos</h3><button class="close" data-cerrar type="button" aria-label="Cerrar">×</button></div>
+  <div class="duo2">
+    <select id="hMes" aria-label="Mes"></select>
+    <select id="hCat" aria-label="Categoría"></select>
+  </div>
+  <input id="hBuscar" type="search" autocomplete="off" placeholder="Buscar (ej: uber, lomito)" aria-label="Buscar" style="margin-top:8px">
+  <div class="chips" id="hCuentas"></div>
+  <div class="m" id="hTotales" style="margin:12px 2px 4px"></div>
+  <ul class="card" id="hLista" style="padding:0 2px"></ul>
+</section>
+
+<section class="sheet" id="precios" hidden aria-label="Precios de la cartera">
+  <div class="head"><h3>Precios de la cartera</h3><button class="close" data-cerrar type="button" aria-label="Cerrar">×</button></div>
+  <p class="m" style="margin:0 0 6px">Precio en pesos por unidad. Bonos: la cotización dividida 100 (ej. 85.250 → 852,50). Las acciones con precio en vivo no aparecen.</p>
+  <div id="pLista"></div>
+  <button class="primary" id="pGuardar" type="button">Guardar precios</button>
+  <div id="pMsg" class="estado" role="status" aria-live="polite" style="margin-top:10px;text-align:center"></div>
+</section>
+
 <script>
   var E = null, tipo = 'Gasto', cat = '', guardando = false, editId = null, token = uid(), enviandoCola = false;
   var BANCO = 'Cuenta Bancaria', cuenta = BANCO, sentido = 0;  // sentido: índice de MOVER (para la pestaña Mover)
   var ETIQ = { 'Gasto': 'Gasto', 'Ingreso': 'Ingreso', 'Cobro de Interés': 'Interés', 'Mover': 'Mover' };
-  function nombreCuenta(c) { return c === BANCO ? 'Banco' : c; }
-  // Pares desde/hacia para mover plata entre cuentas (con banco + efectivo: sacar y depositar)
+  var USDC = 'Dólares (USD)';
+  function nombreCuenta(c) { return c === BANCO ? 'Banco' : c === USDC ? 'Dólares' : c; }
+  function iconoCuenta(c) { return c === BANCO ? '🏦' : c === USDC ? '💲' : '💵'; }
+  function cuentasMover() { return (E && (E.cuentasMover || E.cuentas)) || []; }
+  // Pares desde/hacia para mover plata entre cuentas (sacar/depositar efectivo, comprar/vender dólares)
   function paresMover() {
-    var out = [];
-    E.cuentas.forEach(function (a) { E.cuentas.forEach(function (b) { if (a !== b) out.push({ desde: a, hacia: b }); }); });
+    var cs = cuentasMover(), out = [];
+    cs.forEach(function (a) { cs.forEach(function (b) { if (a !== b) out.push({ desde: a, hacia: b }); }); });
     return out;
   }
+  function conUsd(p) { return !!p && (p.desde === USDC || p.hacia === USDC); }
   function etiquetaPar(p) {
     if (p.desde === BANCO && p.hacia === 'Efectivo') return 'Sacar efectivo (banco → efectivo)';
     if (p.desde === 'Efectivo' && p.hacia === BANCO) return 'Depositar (efectivo → banco)';
+    if (p.hacia === USDC) return p.desde === BANCO ? 'Comprar dólares (con el banco)' : 'Comprar dólares (con efectivo)';
+    if (p.desde === USDC) return p.hacia === BANCO ? 'Vender dólares (al banco)' : 'Vender dólares (en efectivo)';
     return nombreCuenta(p.desde) + ' → ' + nombreCuenta(p.hacia);
   }
   var ICONOS = { Comida: '🍔', Supermercado: '🛒', Kiosco: '🍬', Bebidas: '🥤', Delivery: '🛵', Salidas: '🎉', Transporte: '🚌',
@@ -364,7 +401,7 @@
 
     // El interés lo carga solo el activador: no hay pestaña (salvo para editar uno ya cargado)
     var tabs = E.tipos.filter(function (t) { return t !== 'Cobro de Interés'; });
-    if (E.cuentas.length > 1 && !editId) tabs.push('Mover');
+    if (cuentasMover().length > 1 && !editId) tabs.push('Mover');
     if (tabs.indexOf(tipo) < 0) tabs.unshift(tipo);
     var mover = tipo === 'Mover';
     var seg = $('seg'); seg.textContent = '';
@@ -394,7 +431,7 @@
 
     // Cuenta: en Gasto/Ingreso se elige una; en Mover, el sentido (sacar o depositar)
     var cts = $('cuentas'); cts.textContent = '';
-    $('bloqueCuenta').hidden = E.cuentas.length < 2 || tipo === 'Cobro de Interés';
+    $('bloqueCuenta').hidden = mover ? false : (E.cuentas.length < 2 || tipo === 'Cobro de Interés');
     $('lblCuenta').textContent = mover ? 'Qué querés hacer' : (tipo === 'Ingreso' ? 'Dónde entra' : 'Con qué pagaste');
     if (mover) {
       paresMover().forEach(function (p, i) {
@@ -404,13 +441,21 @@
       });
     } else {
       E.cuentas.forEach(function (c) {
-        var b = el('button', 'chip' + (c === cuenta ? ' on' : ''), (c === BANCO ? '🏦 ' : '💵 ') + nombreCuenta(c)); b.type = 'button';
+        var b = el('button', 'chip' + (c === cuenta ? ' on' : ''), iconoCuenta(c) + ' ' + nombreCuenta(c)); b.type = 'button';
         b.onclick = function () { cuenta = c; render(); };
         cts.appendChild(b);
       });
     }
     $('lblConcepto').textContent = mover ? 'Concepto (opcional)' : 'Concepto';
     frec.hidden = mover;
+    // Comprar/vender dólares: el monto de arriba son los pesos, acá van los dólares
+    var parAct = mover ? paresMover()[sentido] : null;
+    $('bloqueUsd').hidden = !conUsd(parAct);
+    if (conUsd(parAct)) {
+      $('lblUsd').textContent = parAct.hacia === USDC ? '¿Cuántos dólares compraste? (arriba van los pesos que pagaste)'
+        : '¿Cuántos dólares vendiste? (arriba van los pesos que recibiste)';
+      actualizarCotiz();
+    }
 
     $('bloqueCat').hidden = tipo === 'Cobro de Interés' || mover;
     $('lblCats').textContent = tipo === 'Ingreso' ? 'De dónde viene' : 'Categoría';
@@ -481,10 +526,126 @@
     $('patDol').textContent = ARS.format(p.dolares);
     $('patUsd').textContent = USD.format(p.usd) + ' a ' + ARS.format(p.cotizacion);
     $('patCart').textContent = ARS.format(p.cartera);
+    $('abrirPrecios').hidden = !(p.activos || []).some(function (a) { return a.manual; });
     $('patWarn').hidden = !p.preciosViejos;
     $('patWarn').textContent = p.preciosViejos === 1
-      ? '⚠ 1 precio de la cartera hace más de una semana que no lo actualizás (Panel, columna G).'
-      : '⚠ ' + p.preciosViejos + ' precios de la cartera hace más de una semana que no los actualizás (Panel, columna G).';
+      ? '⚠ 1 precio de la cartera hace más de una semana que no lo actualizás.'
+      : '⚠ ' + p.preciosViejos + ' precios de la cartera hace más de una semana que no los actualizás.';
+  }
+
+  // Una fila de movimiento (la usan la lista de recientes y el historial)
+  function filaMov(r, alEliminar) {
+    var pos = r.monto >= 0;
+    var li = el('li', 'row');
+    li.appendChild(el('div', 'ico ' + (r.tr ? 'pend' : pos ? 'pos' : 'neg'), r.tr ? '⇄' : icono(r)));
+    var t = el('div', 't');
+    t.appendChild(el('span', 'c', r.concepto));
+    var m = el('span', 'm', fechaCorta(r.fecha));
+    if (r.tr) {
+      m.appendChild(el('span', 'cat', (pos ? 'Entró a ' : 'Salió de ') + nombreCuenta(r.cuenta)));
+      if (r.usd) m.appendChild(el('span', 'cat', USD.format(Math.abs(r.usd))));
+    } else {
+      if (r.cuenta && r.cuenta !== BANCO) m.appendChild(el('span', 'cat', iconoCuenta(r.cuenta) + ' ' + nombreCuenta(r.cuenta)));
+      if (r.categoria) m.appendChild(el('span', 'cat', r.dev ? 'Devolución · ' + r.categoria : r.categoria));
+    }
+    t.appendChild(m);
+    var acts = el('div', 'acts');
+    if (!r.tr) { var ed = el('button', null, 'Editar'); ed.type = 'button'; ed.onclick = function () { editar(r); }; acts.appendChild(ed); }
+    var d = el('button', null, 'Eliminar'); d.type = 'button'; d.onclick = function () { eliminar(r, alEliminar); };
+    acts.appendChild(d); t.appendChild(acts);
+    li.appendChild(t);
+    li.appendChild(el('div', 'a ' + (r.tr ? 'mut' : pos ? 'pos' : 'neg'), (pos ? '+' : '−') + ARS.format(Math.abs(r.monto))));
+    return li;
+  }
+
+  /* ---------- Historial ---------- */
+  var H = null, hCuenta = '';
+  function nombreMes(k) {
+    var p = k.split('-'); var s = new Date(+p[0], +p[1] - 1, 1).toLocaleDateString('es-AR', { month: 'long' }) + ' ' + p[0];
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+  function abrirPanel(id) { $(id).hidden = false; $('scrim').hidden = false; }
+  function cerrarPaneles() { $('hist').hidden = true; $('precios').hidden = true; if ($('sheet').hidden) $('scrim').hidden = true; }
+  function abrirHist() { abrirPanel('hist'); cargarHist(H ? H.mes : ''); }
+  function cargarHist(mes) {
+    $('hTotales').textContent = 'Cargando…';
+    api('getMovimientos', [mes]).then(function (h) { H = h; renderHist(); },
+      function (e) { $('hTotales').textContent = e.red ? 'Sin señal: el historial necesita conexión.' : e.message; });
+  }
+  function renderHist() {
+    var sm = $('hMes'); sm.textContent = '';
+    H.meses.forEach(function (k) { var o = el('option', null, nombreMes(k)); o.value = k; o.selected = k === H.mes; sm.appendChild(o); });
+    var cats = [];
+    H.movimientos.forEach(function (r) { var c = r.categoria || 'Sin categoría'; if (cats.indexOf(c) < 0) cats.push(c); });
+    cats.sort();
+    var sc = $('hCat'), elegida = sc.value; sc.textContent = '';
+    var o0 = el('option', null, 'Todas las categorías'); o0.value = ''; sc.appendChild(o0);
+    cats.forEach(function (c) { var o = el('option', null, c); o.value = c; o.selected = c === elegida; sc.appendChild(o); });
+    var hc = $('hCuentas'); hc.textContent = '';
+    [''].concat(cuentasMover()).forEach(function (c) {
+      var b = el('button', 'chip' + (c === hCuenta ? ' on' : ''), c ? iconoCuenta(c) + ' ' + nombreCuenta(c) : 'Todas'); b.type = 'button';
+      b.onclick = function () { hCuenta = c; renderHist(); };
+      hc.appendChild(b);
+    });
+    filtrarHist();
+  }
+  function sinAcentos(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+  function filtrarHist() {
+    var q = sinAcentos($('hBuscar').value.trim()), c = $('hCat').value;
+    var lista = H.movimientos.filter(function (r) {
+      return (!q || sinAcentos(r.concepto).indexOf(q) >= 0 || sinAcentos(r.categoria).indexOf(q) >= 0)
+        && (!c || (r.categoria || 'Sin categoría') === c) && (!hCuenta || r.cuenta === hCuenta);
+    });
+    var gastos = 0, ingresos = 0;
+    lista.forEach(function (r) { if (r.tr) return; if (r.monto < 0) gastos -= r.monto; else ingresos += r.monto; });
+    $('hTotales').textContent = lista.length + ' movimiento' + (lista.length === 1 ? '' : 's') +
+      ' · Salió ' + ARS.format(gastos) + ' · Entró ' + ARS.format(ingresos) + ' (sin contar movimientos entre cuentas)';
+    var ul = $('hLista'); ul.textContent = '';
+    if (!lista.length) ul.appendChild(el('div', 'vacio', 'No hay movimientos con ese filtro.'));
+    lista.forEach(function (r) { ul.appendChild(filaMov(r, function () { cargarHist(H.mes); })); });
+  }
+
+  /* ---------- Precios de la cartera ---------- */
+  function abrirPrecios() {
+    var lista = ((E.patrimonio && E.patrimonio.activos) || []).filter(function (a) { return a.manual; });
+    var cont = $('pLista'); cont.textContent = ''; $('pMsg').textContent = '';
+    var limite = Date.now() - 7 * 86400000;
+    lista.forEach(function (a) {
+      var fila = el('div', 'precio');
+      var t = el('div', 't');
+      t.appendChild(el('span', 'c', a.ticker + ' · ' + a.nombre));
+      var viejo = !a.fecha || new Date(a.fecha + 'T12:00:00').getTime() < limite;
+      t.appendChild(el('span', 'm' + (viejo ? ' viejo' : ''), a.fecha ? 'Actualizado ' + fechaCorta(a.fecha) : 'Sin fecha de actualización'));
+      var inp = el('input'); inp.inputMode = 'decimal'; inp.autocomplete = 'off';
+      inp.value = String(a.precio).replace('.', ','); inp.dataset.fila = a.fila; inp.dataset.orig = a.precio;
+      inp.setAttribute('aria-label', 'Precio de ' + a.ticker);
+      fila.appendChild(t); fila.appendChild(inp); cont.appendChild(fila);
+    });
+    abrirPanel('precios');
+  }
+  function guardarPrecios() {
+    var cambios = [], malo = null;
+    [].forEach.call($('pLista').querySelectorAll('input'), function (inp) {
+      var v = parseMonto(inp.value);
+      if (!(v > 0)) { malo = malo || inp; return; }
+      if (Math.abs(v - Number(inp.dataset.orig)) > 1e-9) cambios.push({ fila: Number(inp.dataset.fila), precio: v });
+    });
+    var m = $('pMsg');
+    if (malo) { m.textContent = 'Hay un precio que no es válido.'; m.className = 'estado err'; malo.focus(); return; }
+    if (!cambios.length) { m.textContent = 'No cambiaste ningún precio.'; m.className = 'estado'; return; }
+    m.textContent = 'Guardando…'; m.className = 'estado'; $('pGuardar').disabled = true;
+    api('actualizarPrecios', [cambios]).then(function (est) {
+      $('pGuardar').disabled = false; cerrarPaneles(); init(est);
+      toast(cambios.length === 1 ? 'Precio actualizado' : cambios.length + ' precios actualizados');
+    }, function (e) {
+      $('pGuardar').disabled = false;
+      m.textContent = e.red ? 'Sin señal: para guardar precios necesitás conexión.' : e.message; m.className = 'estado err';
+    });
+  }
+
+  function actualizarCotiz() {
+    var pesos = parseMonto($('monto').value), usd = parseMonto($('usd').value);
+    $('cotizUsd').textContent = pesos > 0 && usd > 0 ? 'Cotización: ' + ARS.format(pesos / usd) + ' por dólar' : '';
   }
 
   function renderLista() {
@@ -501,37 +662,18 @@
       ul.appendChild(li);
     });
     if (!E.recientes.length && !COLA.length) ul.appendChild(el('div', 'vacio', 'Todavía no hay movimientos.'));
-    E.recientes.forEach(function (r) {
-      var pos = r.monto >= 0;
-      var li = el('li', 'row');
-      li.appendChild(el('div', 'ico ' + (r.tr ? 'pend' : pos ? 'pos' : 'neg'), r.tr ? '⇄' : icono(r)));
-      var t = el('div', 't');
-      t.appendChild(el('span', 'c', r.concepto));
-      var m = el('span', 'm', fechaCorta(r.fecha));
-      if (r.tr) m.appendChild(el('span', 'cat', (pos ? 'Entró a ' : 'Salió de ') + nombreCuenta(r.cuenta)));
-      else {
-        if (r.cuenta && r.cuenta !== BANCO) m.appendChild(el('span', 'cat', '💵 ' + r.cuenta));
-        if (r.categoria) m.appendChild(el('span', 'cat', r.dev ? 'Devolución · ' + r.categoria : r.categoria));
-      }
-      t.appendChild(m);
-      var acts = el('div', 'acts');
-      if (!r.tr) { var ed = el('button', null, 'Editar'); ed.type = 'button'; ed.onclick = function () { editar(r); }; acts.appendChild(ed); }
-      var d = el('button', null, 'Eliminar'); d.type = 'button'; d.onclick = function () { eliminar(r); };
-      acts.appendChild(d); t.appendChild(acts);
-      li.appendChild(t);
-      li.appendChild(el('div', 'a ' + (r.tr ? 'mut' : pos ? 'pos' : 'neg'), (pos ? '+' : '−') + ARS.format(Math.abs(r.monto))));
-      ul.appendChild(li);
-    });
+    E.recientes.forEach(function (r) { ul.appendChild(filaMov(r)); });
   }
 
   function limpiarForm() {
-    $('monto').value = ''; $('concepto').value = ''; cat = ''; $('catNueva').value = '';
+    $('monto').value = ''; $('concepto').value = ''; cat = ''; $('catNueva').value = ''; $('usd').value = '';
     editId = null; $('guardar').textContent = 'Guardar';
     if (E) $('fecha').value = E.hoy;
   }
   function nuevo() { limpiarForm(); tipo = 'Gasto'; cuenta = BANCO; render(); abrir(); $('monto').focus(); }
   function moverPlata() { limpiarForm(); tipo = 'Mover'; sentido = 0; render(); abrir(); $('monto').focus(); }
   function editar(r) {
+    cerrarPaneles();
     editId = r.id; tipo = r.tipo; cat = r.categoria || ''; cuenta = r.cuenta || BANCO;
     $('catNueva').value = ''; $('monto').value = String(Math.abs(r.monto)).replace('.', ',');
     $('concepto').value = r.concepto; $('fecha').value = r.fecha;
@@ -543,15 +685,17 @@
     if (guardando) return;
     var monto = parseMonto($('monto').value), concepto = $('concepto').value.trim();
     var mover = tipo === 'Mover';
+    var par = mover ? paresMover()[sentido] : null, usd = parseMonto($('usd').value);
     if (!(monto > 0)) { aviso('Ingresá un monto válido.', true); return; }
     if (!concepto && !mover) { aviso('Falta el concepto.', true); return; }
+    if (conUsd(par) && !(usd > 0)) { aviso('Ingresá cuántos dólares.', true); return; }
     guardando = true;
     var btn = $('guardar'), etiqueta = editId ? 'Guardar cambios' : 'Guardar';
     btn.disabled = true; btn.textContent = 'Guardando…'; aviso('');
     var payload;
     if (mover) {
-      var par = paresMover()[sentido];
       payload = { _accion: 'transferir', monto: monto, desde: par.desde, hacia: par.hacia, concepto: concepto, fecha: $('fecha').value, token: token };
+      if (conUsd(par)) payload.usd = usd;
     } else {
       payload = { tipo: tipo, monto: monto, concepto: concepto,
         categoria: tipo === 'Cobro de Interés' ? '' : ($('catNueva').value.trim() || cat),
@@ -576,17 +720,26 @@
       });
   }
 
-  function eliminar(r) {
-    if (!confirm('¿Eliminar “' + r.concepto + '”?')) return;
+  function eliminar(r, despues) {
+    if (!confirm('¿Eliminar “' + r.concepto + '”?' + (r.tr ? ' (se borran las dos partes del movimiento)' : ''))) return;
     api('eliminarMovimiento', [r.id])
-      .then(function (est) { init(est); toast('Eliminado'); },
+      .then(function (est) { init(est); toast('Eliminado'); if (despues) despues(); },
         function (e) { toast(e.red ? 'Sin señal: para eliminar necesitás conexión.' : (e.message || 'No se pudo eliminar')); });
   }
 
   $('fab').onclick = nuevo;
   $('efeMover').onclick = moverPlata;
   $('cerrar').onclick = cerrar;
-  $('scrim').onclick = cerrar;
+  $('scrim').onclick = function () { if (!$('sheet').hidden) cerrar(); else cerrarPaneles(); };
+  [].forEach.call(document.querySelectorAll('[data-cerrar]'), function (b) { b.onclick = cerrarPaneles; });
+  $('verTodos').onclick = abrirHist;
+  $('hMes').onchange = function () { cargarHist(this.value); };
+  $('hCat').onchange = filtrarHist;
+  $('hBuscar').addEventListener('input', filtrarHist);
+  $('abrirPrecios').onclick = abrirPrecios;
+  $('pGuardar').onclick = guardarPrecios;
+  $('monto').addEventListener('input', actualizarCotiz);
+  $('usd').addEventListener('input', actualizarCotiz);
   $('guardar').onclick = guardar;
   $('catNueva').addEventListener('input', function () { if (this.value) cat = ''; render(); });
   $('monto').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('concepto').focus(); });
@@ -595,12 +748,13 @@
   $('reconectar').onclick = mostrarSetup;
   window.addEventListener('online', function () { if (CONF) { enviarCola(); cargar(); } });
   // Al volver a la app desde segundo plano, trae los datos nuevos (ej. el interés de las 10:42)
-  document.addEventListener('visibilitychange', function () { if (!document.hidden && CONF && $('sheet').hidden) cargar(); });
+  function nadaAbierto() { return $('sheet').hidden && $('hist').hidden && $('precios').hidden; }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && CONF && nadaAbierto()) cargar(); });
   if ('serviceWorker' in navigator) {
     // Cuando se instala una versión nueva de la app, recarga una vez para mostrarla (si no hay un formulario abierto)
     var habiaSW = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener('controllerchange', function () {
-      if (habiaSW && $('sheet').hidden && !recargando) { recargando = true; location.reload(); }
+      if (habiaSW && nadaAbierto() && !recargando) { recargando = true; location.reload(); }
     });
     navigator.serviceWorker.register('sw.js').then(function (reg) { reg.update(); }).catch(function () {});
   }
