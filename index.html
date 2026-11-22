@@ -100,7 +100,7 @@
 <body>
 <section id="setup" hidden style="max-width:480px;margin:0 auto;padding:24px 16px">
   <h1>Conectar con tu planilla</h1>
-  <p>Se hace una sola vez. Los dos datos salen de la planilla: menú Control Financiero &gt; Ver clave de la app del celu.</p>
+  <p>Se hace una sola vez. El link sale del editor de Apps Script: Implementar &gt; Administrar implementaciones &gt; URL. La clave, de la planilla: Control Financiero &gt; Ver clave de la app del celu.</p>
   <label for="cfgUrl">Link de la API</label>
   <input id="cfgUrl" autocomplete="off" inputmode="url" placeholder="https://script.google.com/macros/s/.../exec">
   <label for="cfgClave">Clave</label>
@@ -203,7 +203,11 @@
       .then(function (r) {
         if (!r.ok) throw new Error('El servidor respondió ' + r.status + '.');
         return r.json().catch(function () { throw new Error('Respuesta inesperada. Revisá que la implementación tenga acceso "Cualquier usuario".'); });
-      }, function () { throw new Error('Sin conexión.'); })
+      }, function () {
+        // fetch también falla así si Google responde una página de error o de login (sin permiso CORS)
+        throw new Error(navigator.onLine === false ? 'Sin conexión.'
+          : 'No pude conectar con la API. Revisá el link (Administrar implementaciones) y que el acceso sea "Cualquier usuario".');
+      })
       .then(function (j) { if (!j.ok) throw new Error(j.error || 'Error del servidor.'); return j.data; });
   }
   function estado(txt, error) { var s = $('estado'); s.textContent = txt || ''; s.className = 'estado' + (error ? ' err' : ''); }

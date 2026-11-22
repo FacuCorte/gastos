@@ -1,6 +1,6 @@
 // Guarda la pantalla en el celu para que abra al instante. Los datos (Apps Script) siempre van por red.
 // Al cambiar cualquier archivo de la app, subí este número para que el celu baje la versión nueva.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const ARCHIVOS = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
