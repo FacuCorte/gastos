@@ -596,7 +596,15 @@
   window.addEventListener('online', function () { if (CONF) { enviarCola(); cargar(); } });
   // Al volver a la app desde segundo plano, trae los datos nuevos (ej. el interés de las 10:42)
   document.addEventListener('visibilitychange', function () { if (!document.hidden && CONF && $('sheet').hidden) cargar(); });
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+  if ('serviceWorker' in navigator) {
+    // Cuando se instala una versión nueva de la app, recarga una vez para mostrarla (si no hay un formulario abierto)
+    var habiaSW = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (habiaSW && $('sheet').hidden && !recargando) { recargando = true; location.reload(); }
+    });
+    navigator.serviceWorker.register('sw.js').then(function (reg) { reg.update(); }).catch(function () {});
+  }
+  var recargando = false;
   if (CONF && CONF.url && CONF.clave) cargar(); else mostrarSetup();
 </script>
 </body>
