@@ -41,6 +41,8 @@
   .mini b { display: block; margin-top: 2px; font-size: 17px; font-variant-numeric: tabular-nums; }
   .mini .pos { color: var(--hero-pos); }
   .mini .neg { color: var(--hero-neg); }
+  .bancos { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: -8px 0 14px; font-size: 13px; color: var(--hero-mute); }
+  .bancos b { color: var(--on-hero); font-weight: 650; font-variant-numeric: tabular-nums; }
   .mini small { display: block; margin-top: 4px; font-size: 11.5px; color: var(--hero-mute); }
 
   .card { background: var(--card); border-radius: 20px; padding: 6px 14px; margin: 0; list-style: none; }
@@ -141,8 +143,9 @@
   <h1>Resumen de <span id="mesNombre">…</span></h1>
 
   <section class="hero">
-    <span class="k">Saldo en cuenta</span>
+    <span class="k" id="saldoLbl">Saldo en cuenta</span>
     <p class="big" id="saldo">…</p>
+    <div id="bancosHero" class="bancos" hidden></div>
     <div class="duo">
       <div class="mini"><span class="k">Ingresos</span><b class="pos" id="ingMes">…</b><small id="ingNota"></small></div>
       <div class="mini"><span class="k">Gastos (neto)</span><b class="neg" id="gasMes">…</b><small id="gasNota"></small></div>
@@ -205,6 +208,7 @@
   <div class="seg" id="seg" role="tablist" aria-label="Tipo de operación"></div>
   <div class="montoWrap"><span>$</span><input id="monto" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Monto en pesos"></div>
   <div id="bloqueCuenta" hidden><div class="lbl" id="lblCuenta">Cuenta</div><div class="chips" id="cuentas"></div></div>
+  <div id="bloqueCuenta2" hidden><div class="lbl">Va a</div><div class="chips" id="cuentas2"></div></div>
   <div id="bloqueUsd" hidden>
     <label for="usd" id="lblUsd">¿Cuántos dólares?</label>
     <input id="usd" inputmode="decimal" autocomplete="off" placeholder="US$ 0">
@@ -265,24 +269,23 @@
 
 <script>
   var E = null, tipo = 'Gasto', cat = '', guardando = false, editId = null, token = uid(), enviandoCola = false;
-  var BANCO = 'Cuenta Bancaria', cuenta = BANCO, sentido = 0;  // sentido: índice de MOVER (para la pestaña Mover)
+  var BANCO = 'Cuenta Bancaria', cuenta = BANCO, moverDesde = '', moverHacia = '';
+  function cuentaPrincipal() { return (E && E.cuentas && E.cuentas[0]) || BANCO; }
+  function variosBancos() { return !!(E && E.bancos && E.bancos.length > 1); }
+  // Etiqueta de cuenta en una fila: se muestra si no es la principal, o siempre si hay varios bancos
+  function mostrarCuenta(c) { return !!c && (c !== cuentaPrincipal() || variosBancos()); }
   var ETIQ = { 'Gasto': 'Gasto', 'Ingreso': 'Ingreso', 'Cobro de Interés': 'Interés', 'Mover': 'Mover' };
   var USDC = 'Dólares (USD)';
   function nombreCuenta(c) { return c === BANCO ? 'Banco' : c === USDC ? 'Dólares' : c; }
-  function iconoCuenta(c) { return c === BANCO ? '🏦' : c === USDC ? '💲' : '💵'; }
+  function iconoCuenta(c) { return c === USDC ? '💲' : c === 'Efectivo' ? '💵' : '🏦'; }
   function cuentasMover() { return (E && (E.cuentasMover || E.cuentas)) || []; }
-  // Pares desde/hacia para mover plata entre cuentas (sacar/depositar efectivo, comprar/vender dólares)
-  function paresMover() {
-    var cs = cuentasMover(), out = [];
-    cs.forEach(function (a) { cs.forEach(function (b) { if (a !== b) out.push({ desde: a, hacia: b }); }); });
-    return out;
-  }
   function conUsd(p) { return !!p && (p.desde === USDC || p.hacia === USDC); }
   function etiquetaPar(p) {
-    if (p.desde === BANCO && p.hacia === 'Efectivo') return 'Sacar efectivo (banco → efectivo)';
-    if (p.desde === 'Efectivo' && p.hacia === BANCO) return 'Depositar (efectivo → banco)';
-    if (p.hacia === USDC) return p.desde === BANCO ? 'Comprar dólares (con el banco)' : 'Comprar dólares (con efectivo)';
-    if (p.desde === USDC) return p.hacia === BANCO ? 'Vender dólares (al banco)' : 'Vender dólares (en efectivo)';
+    var n = function (c) { return c === 'Efectivo' ? 'efectivo' : nombreCuenta(c); };
+    if (p.hacia === USDC) return 'Compra de dólares con ' + n(p.desde);
+    if (p.desde === USDC) return 'Venta de dólares a ' + n(p.hacia);
+    if (p.hacia === 'Efectivo') return 'Extracción de efectivo de ' + n(p.desde);
+    if (p.desde === 'Efectivo') return 'Depósito de efectivo en ' + n(p.hacia);
     return nombreCuenta(p.desde) + ' → ' + nombreCuenta(p.hacia);
   }
   var ICONOS = { Comida: '🍔', Supermercado: '🛒', Kiosco: '🍬', Bebidas: '🥤', Delivery: '🛵', Salidas: '🎉', Transporte: '🚌',
@@ -413,6 +416,12 @@
 
   function render() {
     $('saldo').textContent = ARS.format(E.saldo);
+    // Con varias cuentas bancarias: total arriba y el saldo de cada una debajo
+    $('saldoLbl').textContent = variosBancos() ? 'Saldo en bancos' : 'Saldo en cuenta';
+    var bh = $('bancosHero'); bh.textContent = ''; bh.hidden = !variosBancos();
+    if (variosBancos()) E.bancos.forEach(function (b) {
+      var s = el('span', null, b.nombre + ' '); s.appendChild(el('b', null, plata(b.saldo))); bh.appendChild(s);
+    });
     $('mesNombre').textContent = E.mes.nombre;
     $('ingMes').textContent = E.mes.ingresos == null ? '—' : ARS.format(E.mes.ingresos);
     $('gasMes').textContent = plata(E.mes.gastado);
@@ -451,27 +460,34 @@
       frec.appendChild(b);
     });
 
-    // Cuenta: en Gasto/Ingreso se elige una; en Mover, el sentido (sacar o depositar)
-    var cts = $('cuentas'); cts.textContent = '';
+    // Cuenta: en Gasto/Ingreso se elige una; en Mover, de dónde sale y a dónde va
+    var chipsCuenta = function (cont, lista, elegida, alElegir) {
+      cont.textContent = '';
+      lista.forEach(function (c) {
+        var b = el('button', 'chip' + (c === elegida ? ' on' : ''), iconoCuenta(c) + ' ' + nombreCuenta(c)); b.type = 'button';
+        b.onclick = function () { alElegir(c); render(); };
+        cont.appendChild(b);
+      });
+    };
     $('bloqueCuenta').hidden = mover ? false : (E.cuentas.length < 2 || tipo === 'Cobro de Interés');
-    $('lblCuenta').textContent = mover ? 'Qué querés hacer' : (tipo === 'Ingreso' ? 'Dónde entra' : 'Con qué pagaste');
+    $('bloqueCuenta2').hidden = !mover;
+    $('lblCuenta').textContent = mover ? 'Sale de' : (tipo === 'Ingreso' ? 'Dónde entra' : 'Con qué pagaste');
     if (mover) {
-      paresMover().forEach(function (p, i) {
-        var b = el('button', 'chip' + (i === sentido ? ' on' : ''), etiquetaPar(p)); b.type = 'button';
-        b.onclick = function () { sentido = i; render(); };
-        cts.appendChild(b);
+      var cm = cuentasMover();
+      if (cm.indexOf(moverDesde) < 0) moverDesde = cm[0];
+      if (cm.indexOf(moverHacia) < 0 || moverHacia === moverDesde) moverHacia = cm.filter(function (c) { return c !== moverDesde; })[0];
+      chipsCuenta($('cuentas'), cm, moverDesde, function (c) {
+        if (c === moverHacia) moverHacia = moverDesde;  // elegir el mismo lado los da vuelta
+        moverDesde = c;
       });
+      chipsCuenta($('cuentas2'), cm.filter(function (c) { return c !== moverDesde; }), moverHacia, function (c) { moverHacia = c; });
     } else {
-      E.cuentas.forEach(function (c) {
-        var b = el('button', 'chip' + (c === cuenta ? ' on' : ''), iconoCuenta(c) + ' ' + nombreCuenta(c)); b.type = 'button';
-        b.onclick = function () { cuenta = c; render(); };
-        cts.appendChild(b);
-      });
+      chipsCuenta($('cuentas'), E.cuentas, cuenta, function (c) { cuenta = c; });
     }
     $('lblConcepto').textContent = mover ? 'Concepto (opcional)' : 'Concepto';
     frec.hidden = mover;
     // Comprar/vender dólares: el monto de arriba son los pesos, acá van los dólares
-    var parAct = mover ? paresMover()[sentido] : null;
+    var parAct = mover ? { desde: moverDesde, hacia: moverHacia } : null;
     $('bloqueUsd').hidden = !conUsd(parAct);
     if (conUsd(parAct)) {
       $('lblUsd').textContent = parAct.hacia === USDC ? '¿Cuántos dólares compraste? (arriba van los pesos que pagaste)'
@@ -568,7 +584,7 @@
       m.appendChild(el('span', 'cat', (pos ? 'Entró a ' : 'Salió de ') + nombreCuenta(r.cuenta)));
       if (r.usd) m.appendChild(el('span', 'cat', USD.format(Math.abs(r.usd))));
     } else {
-      if (r.cuenta && r.cuenta !== BANCO) m.appendChild(el('span', 'cat', iconoCuenta(r.cuenta) + ' ' + nombreCuenta(r.cuenta)));
+      if (mostrarCuenta(r.cuenta)) m.appendChild(el('span', 'cat', iconoCuenta(r.cuenta) + ' ' + nombreCuenta(r.cuenta)));
       if (r.categoria) m.appendChild(el('span', 'cat', r.dev ? 'Devolución · ' + r.categoria : r.categoria));
     }
     t.appendChild(m);
@@ -686,7 +702,7 @@
       var cuando = f.pagado ? 'Pagado este mes' : f.faltan === 0 ? 'Vence hoy' : f.faltan === 1 ? 'Vence mañana'
         : f.faltan > 0 ? 'Vence en ' + f.faltan + ' días (el ' + f.dia + ')' : 'Venció el ' + f.dia + ' · se registra hoy';
       var m = el('span', 'm' + (!f.pagado && f.faltan >= 0 && f.faltan <= 3 ? ' viejo' : ''), cuando);
-      if (f.cuenta && f.cuenta !== BANCO) m.appendChild(el('span', 'cat', iconoCuenta(f.cuenta) + ' ' + nombreCuenta(f.cuenta)));
+      if (mostrarCuenta(f.cuenta)) m.appendChild(el('span', 'cat', iconoCuenta(f.cuenta) + ' ' + nombreCuenta(f.cuenta)));
       t.appendChild(m);
       var acts = el('div', 'acts');
       var ed = el('button', null, 'Editar'); ed.type = 'button'; ed.onclick = function () { abrirFijo(f); };
@@ -716,7 +732,7 @@
   }
   function abrirFijo(f) {
     fijoEdit = f || null;
-    fCat = f ? f.categoria : ''; fCuenta = f ? f.cuenta : BANCO;
+    fCat = f ? f.categoria : ''; fCuenta = f ? f.cuenta : cuentaPrincipal();
     $('fTitulo').textContent = f ? 'Editar gasto fijo' : 'Nuevo gasto fijo';
     $('fMonto').value = f ? String(f.monto).replace('.', ',') : '';
     $('fConcepto').value = f ? f.concepto : '';
@@ -778,11 +794,11 @@
     editId = null; $('guardar').textContent = 'Guardar';
     if (E) $('fecha').value = E.hoy;
   }
-  function nuevo() { limpiarForm(); tipo = 'Gasto'; cuenta = BANCO; render(); abrir(); $('monto').focus(); }
-  function moverPlata() { limpiarForm(); tipo = 'Mover'; sentido = 0; render(); abrir(); $('monto').focus(); }
+  function nuevo() { limpiarForm(); tipo = 'Gasto'; cuenta = cuentaPrincipal(); render(); abrir(); $('monto').focus(); }
+  function moverPlata() { limpiarForm(); tipo = 'Mover'; moverDesde = cuentaPrincipal(); moverHacia = 'Efectivo'; render(); abrir(); $('monto').focus(); }
   function editar(r) {
     cerrarPaneles();
-    editId = r.id; tipo = r.tipo; cat = r.categoria || ''; cuenta = r.cuenta || BANCO;
+    editId = r.id; tipo = r.tipo; cat = r.categoria || ''; cuenta = r.cuenta || cuentaPrincipal();
     $('catNueva').value = ''; $('monto').value = String(Math.abs(r.monto)).replace('.', ',');
     $('concepto').value = r.concepto; $('fecha').value = r.fecha;
     $('guardar').textContent = 'Guardar cambios'; aviso('');
@@ -793,7 +809,7 @@
     if (guardando) return;
     var monto = parseMonto($('monto').value), concepto = $('concepto').value.trim();
     var mover = tipo === 'Mover';
-    var par = mover ? paresMover()[sentido] : null, usd = parseMonto($('usd').value);
+    var par = mover ? { desde: moverDesde, hacia: moverHacia } : null, usd = parseMonto($('usd').value);
     if (!(monto > 0)) { aviso('Ingresá un monto válido.', true); return; }
     if (!concepto && !mover) { aviso('Falta el concepto.', true); return; }
     if (conUsd(par) && !(usd > 0)) { aviso('Ingresá cuántos dólares.', true); return; }
