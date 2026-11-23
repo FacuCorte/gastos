@@ -120,7 +120,7 @@
   #setup p { color: var(--mute); font-size: 14px; }
   .duo2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .precio { display: grid; grid-template-columns: 1fr 130px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
-  .precio .viejo { color: var(--red); }
+  .viejo { color: var(--red); }
   .precio input { text-align: right; font-variant-numeric: tabular-nums; }
 </style>
 </head>
@@ -158,6 +158,13 @@
         <button class="chip" id="efeMover" type="button">Sacar o depositar</button>
       </div>
     </div>
+  </section>
+
+  <section id="bloqueFijos" hidden>
+    <h2>Gastos fijos</h2>
+    <div class="m" id="fijosResumen" style="margin:-4px 2px 8px"></div>
+    <ul class="card" id="fijosLista"></ul>
+    <p style="text-align:center;margin:10px 0 0"><button class="chip" id="fijoNuevo" type="button">+ Agregar gasto fijo</button></p>
   </section>
 
   <h2>Movimientos recientes</h2>
@@ -231,6 +238,21 @@
   <div class="chips" id="hCuentas"></div>
   <div class="m" id="hTotales" style="margin:12px 2px 4px"></div>
   <ul class="card" id="hLista" style="padding:0 2px"></ul>
+</section>
+
+<section class="sheet" id="fijoForm" hidden aria-label="Gasto fijo">
+  <div class="head"><h3 id="fTitulo">Nuevo gasto fijo</h3><button class="close" data-cerrar type="button" aria-label="Cerrar">×</button></div>
+  <div class="montoWrap"><span>$</span><input id="fMonto" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Monto por mes"></div>
+  <label for="fConcepto">Concepto</label>
+  <input id="fConcepto" autocomplete="off" placeholder="Ej: Netflix, Luz, Alquiler">
+  <label for="fDia">Día del mes en que vence</label>
+  <input id="fDia" type="number" inputmode="numeric" min="1" max="31" placeholder="Ej: 10">
+  <div class="lbl">Categoría</div>
+  <div class="chips" id="fCats"></div>
+  <div id="fBloqueCuenta"><div class="lbl">Se paga con</div><div class="chips" id="fCuentas"></div></div>
+  <p class="m" style="margin:12px 0 0">El día del vencimiento se registra solo como gasto. Si el día ya pasó este mes, empieza el mes que viene.</p>
+  <button class="primary" id="fGuardar" type="button">Guardar</button>
+  <div id="fMsg" class="estado" role="status" aria-live="polite" style="margin-top:10px;text-align:center"></div>
 </section>
 
 <section class="sheet" id="precios" hidden aria-label="Precios de la cartera">
@@ -464,6 +486,7 @@
     if (tipo === 'Ingreso') chipsCat($('catsDev'), E.categorias);
 
     renderEfectivo();
+    renderFijos();
     renderResumen();
     renderIngresos();
     renderPatrimonio();
@@ -565,7 +588,7 @@
     return s.charAt(0).toUpperCase() + s.slice(1);
   }
   function abrirPanel(id) { $(id).hidden = false; $('scrim').hidden = false; }
-  function cerrarPaneles() { $('hist').hidden = true; $('precios').hidden = true; if ($('sheet').hidden) $('scrim').hidden = true; }
+  function cerrarPaneles() { $('hist').hidden = true; $('precios').hidden = true; $('fijoForm').hidden = true; if ($('sheet').hidden) $('scrim').hidden = true; }
   function abrirHist() { abrirPanel('hist'); cargarHist(H ? H.mes : ''); }
   function cargarHist(mes) {
     $('hTotales').textContent = 'Cargando…';
@@ -641,6 +664,91 @@
       $('pGuardar').disabled = false;
       m.textContent = e.red ? 'Sin señal: para guardar precios necesitás conexión.' : e.message; m.className = 'estado err';
     });
+  }
+
+  /* ---------- Gastos fijos ---------- */
+  var fijoEdit = null, fCat = '', fCuenta = BANCO;
+  function renderFijos() {
+    var lista = E.fijos;
+    $('bloqueFijos').hidden = !lista;  // script viejo: no hay sección
+    if (!lista) return;
+    var total = 0, falta = 0;
+    lista.forEach(function (f) { total += f.monto; if (!f.pagado) falta += f.monto; });
+    $('fijosResumen').textContent = lista.length
+      ? ARS.format(total) + ' por mes · ' + (falta ? 'falta pagar ' + ARS.format(falta) + ' este mes' : 'este mes ya está todo pago') : '';
+    var ul = $('fijosLista'); ul.textContent = '';
+    if (!lista.length) ul.appendChild(el('div', 'vacio', 'No tenés gastos fijos cargados.'));
+    lista.forEach(function (f) {
+      var li = el('li', 'row');
+      li.appendChild(el('div', 'ico ' + (f.pagado ? 'pend' : 'neg'), ICONOS[f.categoria] || '📅'));
+      var t = el('div', 't');
+      t.appendChild(el('span', 'c', f.concepto));
+      var cuando = f.pagado ? 'Pagado este mes' : f.faltan === 0 ? 'Vence hoy' : f.faltan === 1 ? 'Vence mañana'
+        : f.faltan > 0 ? 'Vence en ' + f.faltan + ' días (el ' + f.dia + ')' : 'Venció el ' + f.dia + ' · se registra hoy';
+      var m = el('span', 'm' + (!f.pagado && f.faltan >= 0 && f.faltan <= 3 ? ' viejo' : ''), cuando);
+      if (f.cuenta && f.cuenta !== BANCO) m.appendChild(el('span', 'cat', iconoCuenta(f.cuenta) + ' ' + nombreCuenta(f.cuenta)));
+      t.appendChild(m);
+      var acts = el('div', 'acts');
+      var ed = el('button', null, 'Editar'); ed.type = 'button'; ed.onclick = function () { abrirFijo(f); };
+      var d = el('button', null, 'Eliminar'); d.type = 'button'; d.onclick = function () { eliminarFijo(f); };
+      acts.appendChild(ed); acts.appendChild(d); t.appendChild(acts);
+      li.appendChild(t);
+      li.appendChild(el('div', 'a ' + (f.pagado ? 'mut' : 'neg'), ARS.format(f.monto)));
+      ul.appendChild(li);
+    });
+  }
+  function renderFijoForm() {
+    var cs = $('fCats'); cs.textContent = '';
+    var cats = E.categorias.slice();
+    if (fCat && cats.indexOf(fCat) < 0) cats.push(fCat);
+    cats.forEach(function (c) {
+      var b = el('button', 'chip' + (c === fCat ? ' on' : ''), c); b.type = 'button';
+      b.onclick = function () { fCat = fCat === c ? '' : c; renderFijoForm(); };
+      cs.appendChild(b);
+    });
+    $('fBloqueCuenta').hidden = E.cuentas.length < 2;
+    var cc = $('fCuentas'); cc.textContent = '';
+    E.cuentas.forEach(function (c) {
+      var b = el('button', 'chip' + (c === fCuenta ? ' on' : ''), iconoCuenta(c) + ' ' + nombreCuenta(c)); b.type = 'button';
+      b.onclick = function () { fCuenta = c; renderFijoForm(); };
+      cc.appendChild(b);
+    });
+  }
+  function abrirFijo(f) {
+    fijoEdit = f || null;
+    fCat = f ? f.categoria : ''; fCuenta = f ? f.cuenta : BANCO;
+    $('fTitulo').textContent = f ? 'Editar gasto fijo' : 'Nuevo gasto fijo';
+    $('fMonto').value = f ? String(f.monto).replace('.', ',') : '';
+    $('fConcepto').value = f ? f.concepto : '';
+    $('fDia').value = f ? f.dia : '';
+    $('fMsg').textContent = '';
+    renderFijoForm();
+    abrirPanel('fijoForm');
+    if (!f) $('fMonto').focus();
+  }
+  function guardarFijo() {
+    var m = $('fMsg'), btn = $('fGuardar');
+    var p = { monto: parseMonto($('fMonto').value), concepto: $('fConcepto').value.trim(), dia: Number($('fDia').value),
+      categoria: fCat, cuenta: fCuenta };
+    if (!(p.monto > 0)) { m.textContent = 'Ingresá un monto válido.'; m.className = 'estado err'; return; }
+    if (!p.concepto) { m.textContent = 'Falta el concepto.'; m.className = 'estado err'; return; }
+    if (!(p.dia >= 1 && p.dia <= 31 && p.dia === Math.floor(p.dia))) { m.textContent = 'El día tiene que ser entre 1 y 31.'; m.className = 'estado err'; return; }
+    if (fijoEdit) { p.fila = fijoEdit.fila; p.conceptoOriginal = fijoEdit.concepto; }
+    btn.disabled = true; m.textContent = 'Guardando…'; m.className = 'estado';
+    var eraNuevo = !fijoEdit;
+    api('guardarGastoFijo', [p]).then(function (est) {
+      btn.disabled = false; cerrarPaneles(); init(est);
+      var nuevo = eraNuevo && (est.fijos || []).filter(function (f) { return f.concepto === p.concepto; })[0];
+      toast(nuevo && nuevo.pagado && nuevo.faltan < 0 ? 'Guardado: empieza a registrarse el mes que viene' : 'Gasto fijo guardado');
+    }, function (e) {
+      btn.disabled = false;
+      m.textContent = e.red ? 'Sin señal: para guardar gastos fijos necesitás conexión.' : e.message; m.className = 'estado err';
+    });
+  }
+  function eliminarFijo(f) {
+    if (!confirm('¿Eliminar el gasto fijo “' + f.concepto + '”? Lo que ya se registró en meses anteriores queda.')) return;
+    api('eliminarGastoFijo', [f.fila, f.concepto]).then(function (est) { init(est); toast('Gasto fijo eliminado'); },
+      function (e) { toast(e.red ? 'Sin señal: para eliminar necesitás conexión.' : e.message); });
   }
 
   function actualizarCotiz() {
@@ -738,6 +846,8 @@
   $('hBuscar').addEventListener('input', filtrarHist);
   $('abrirPrecios').onclick = abrirPrecios;
   $('pGuardar').onclick = guardarPrecios;
+  $('fijoNuevo').onclick = function () { abrirFijo(null); };
+  $('fGuardar').onclick = guardarFijo;
   $('monto').addEventListener('input', actualizarCotiz);
   $('usd').addEventListener('input', actualizarCotiz);
   $('guardar').onclick = guardar;
@@ -748,7 +858,7 @@
   $('reconectar').onclick = mostrarSetup;
   window.addEventListener('online', function () { if (CONF) { enviarCola(); cargar(); } });
   // Al volver a la app desde segundo plano, trae los datos nuevos (ej. el interés de las 10:42)
-  function nadaAbierto() { return $('sheet').hidden && $('hist').hidden && $('precios').hidden; }
+  function nadaAbierto() { return $('sheet').hidden && $('hist').hidden && $('precios').hidden && $('fijoForm').hidden; }
   document.addEventListener('visibilitychange', function () { if (!document.hidden && CONF && nadaAbierto()) cargar(); });
   if ('serviceWorker' in navigator) {
     // Cuando se instala una versión nueva de la app, recarga una vez para mostrarla (si no hay un formulario abierto)
